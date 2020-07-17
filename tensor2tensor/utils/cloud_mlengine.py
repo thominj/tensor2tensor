@@ -35,7 +35,7 @@ import tensorflow.compat.v1 as tf
 FLAGS = tf.flags.FLAGS
 
 CONSOLE_URL = "https://console.cloud.google.com/mlengine/jobs/"
-RUNTIME_VERSION = "1.14"
+RUNTIME_VERSION = "1.15"
 LIST_VM = "gcloud compute instances list"
 DEFAULT_PROJECT = "gcloud config get-value project"
 DEFAULT_REGION = "gcloud config get-value compute/region"
