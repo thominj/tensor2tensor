@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2019 The Tensor2Tensor Authors.
+# Copyright 2020 The Tensor2Tensor Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ from tensor2tensor import problems as problems_lib  # pylint: disable=unused-imp
 from tensor2tensor.data_generators import problem  # pylint: disable=unused-import
 
 from tensor2tensor.utils import cloud_mlengine
+from tensor2tensor.utils import contrib
 from tensor2tensor.utils import decoding
 from tensor2tensor.utils import flags as t2t_flags  # pylint: disable=unused-import
 from tensor2tensor.utils import hparams_lib
@@ -33,9 +34,7 @@ from tensor2tensor.utils import mlperf_log
 from tensor2tensor.utils import registry
 from tensor2tensor.utils import trainer_lib
 from tensor2tensor.utils import usr_dir
-import tensorflow as tf
-
-from tensorflow.contrib.tpu.python.tpu import tpu_config
+import tensorflow.compat.v1 as tf
 
 
 flags = tf.flags
@@ -232,7 +231,7 @@ def create_run_config(hp, output_dir=None):
   save_ckpt_secs = FLAGS.save_checkpoints_secs or None
   if save_ckpt_secs:
     save_ckpt_steps = None
-  assert FLAGS.output_dir or FLAGS.checkpoint_path
+  assert FLAGS.output_dir
   tpu_config_extra_kwargs = {}
   if FLAGS.tpu_job_name is not None:
     tpu_config_extra_kwargs["tpu_job_name"] = FLAGS.tpu_job_name
@@ -241,8 +240,10 @@ def create_run_config(hp, output_dir=None):
     save_ckpt_steps = None  # Disable the default saver
     save_ckpt_secs = None  # Disable the default saver
     tpu_config_extra_kwargs = {
-        "num_cores_per_replica": 1,
-        "per_host_input_for_training": tpu_config.InputPipelineConfig.BROADCAST,
+        "num_cores_per_replica":
+            1,
+        "per_host_input_for_training":
+            tf.estimator.tpu.InputPipelineConfig.BROADCAST,
     }
 
   # the various custom getters we have written do not play well together yet.
@@ -304,7 +305,7 @@ def generate_data():
 @contextlib.contextmanager
 def profile_context():
   if FLAGS.profile:
-    with tf.contrib.tfprof.ProfileContext(
+    with contrib.tfprof().ProfileContext(
         "t2tprof", trace_steps=range(100), dump_steps=range(100)) as pctx:
       opts = tf.profiler.ProfileOptionBuilder.time_and_memory()
       pctx.add_auto_profiling("op", opts, range(100))

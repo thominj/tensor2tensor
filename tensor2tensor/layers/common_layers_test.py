@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2019 The Tensor2Tensor Authors.
+# Copyright 2020 The Tensor2Tensor Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,9 +26,9 @@ import numpy as np
 from tensor2tensor.layers import common_layers
 from tensor2tensor.utils import test_utils
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
-tf.compat.v1.enable_eager_execution()
+tf.enable_eager_execution()
 
 
 class CommonLayersTest(parameterized.TestCase, tf.test.TestCase):
@@ -678,6 +678,82 @@ class CommonLayersTest(parameterized.TestCase, tf.test.TestCase):
     self.assertAllClose(dx, dx_f)
 
   @test_utils.run_in_graph_and_eager_modes()
+  def testTopk(self):
+    batch_size = 3
+    seq_len = 5
+    vocab_size = 7
+
+    top_k = [3, 2, -1]
+    logits = np.random.rand(batch_size, seq_len, 1, 1, vocab_size) + 0.001
+    topk_logits = common_layers._select_top_k(logits, top_k)
+
+    self.evaluate(tf.global_variables_initializer())
+    topk_logits = self.evaluate(topk_logits)
+
+    for i, k in enumerate(top_k):
+      for j in range(seq_len):
+        self.assertEqual((topk_logits[i, j, 0, 0, :] > -1e6).sum(),
+                         k if k != -1 else vocab_size)
+
+  @test_utils.run_in_graph_and_eager_modes()
+  def testSampleTemperaturePerExample(self):
+    batch_size = 3
+    seq_len = 5
+    vocab_size = 7
+
+    logits = np.random.randn(batch_size, seq_len, 1, 1, vocab_size)
+    temperature = np.random.rand(batch_size)
+
+    out = common_layers.sample_temperature_per_example(logits, temperature, -1)
+
+    self.assertAllEqual(
+        self.evaluate(tf.shape(out)), [batch_size, seq_len, 1, 1])
+
+  @test_utils.run_in_graph_and_eager_modes()
+  def testSampleTemperaturePerExampleWithTopK(self):
+    batch_size = 3
+    seq_len = 5
+    vocab_size = 7
+
+    logits = np.random.randn(batch_size, seq_len, 1, 1, vocab_size)
+    temperature = np.random.rand(batch_size)
+    top_k = np.array([3, -1, 4], dtype=np.int32)
+
+    out = common_layers.sample_temperature_per_example(logits, temperature,
+                                                       top_k)
+
+    self.assertAllEqual(
+        self.evaluate(tf.shape(out)), [batch_size, seq_len, 1, 1])
+
+  @test_utils.run_in_graph_and_eager_modes()
+  def testSampleTemperaturePerExampleWithTopK2(self):
+    batch_size = 3
+    vocab_size = 7
+
+    logits = np.random.randn(batch_size, vocab_size)
+    temperature = np.random.rand(batch_size)
+    top_k = np.array([3, -1, 4], dtype=np.int32)
+
+    out = common_layers.sample_temperature_per_example(logits, temperature,
+                                                       top_k)
+
+    self.assertAllEqual(self.evaluate(tf.shape(out)), [batch_size])
+
+  @test_utils.run_in_graph_mode_only()
+  def testSampleTemperaturePerExampleDynamicBatchSize(self):
+    batch_size = None
+    vocab_size = 7
+
+    logits = tf.placeholder(tf.float32, shape=(batch_size, vocab_size))
+    temperature = tf.placeholder(tf.float32, shape=(batch_size, 1))
+    sampling_keep_top_k = tf.placeholder(tf.int32, shape=(batch_size, 1))
+
+    out = common_layers.sample_temperature_per_example(logits, temperature,
+                                                       sampling_keep_top_k)
+
+    self.assertAllEqual(out.shape.as_list(), [batch_size])
+
+  @test_utils.run_in_graph_and_eager_modes()
   def testCycleGANUpsampleNnUpsampleConv(self):
     batch = 8
     height = 32
@@ -848,7 +924,7 @@ class RecomputeTest(tf.test.TestCase):
 
     def layer(x, name=None):
       with tf.variable_scope(name, default_name="layer"):
-        x = tf.contrib.layers.layer_norm(x)
+        x = common_layers.layer_norm(x)
         x = tf.layers.conv1d(
             x,
             10,

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2019 The Tensor2Tensor Authors.
+# Copyright 2020 The Tensor2Tensor Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,12 +31,13 @@ from tensor2tensor.layers import discretization
 
 from tensor2tensor.models.video import base
 from tensor2tensor.models.video import base_vae
+from tensor2tensor.utils import contrib
 from tensor2tensor.utils import registry
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 tfl = tf.layers
-tfcl = tf.contrib.layers
+tfcl = contrib.layers()
 
 
 @registry.register_model
@@ -508,14 +509,16 @@ class NextFrameSv2pAtari(NextFrameSv2p):
 class NextFrameSv2pLegacy(NextFrameSv2p):
   """Old SV2P code. Only for legacy reasons."""
 
-  def visualize_predictions(self, real_frames, gen_frames):
+  def visualize_predictions(self, real_frames, gen_frames, actions=None):
+
     def concat_on_y_axis(x):
       x = tf.unstack(x, axis=1)
       x = tf.concat(x, axis=1)
       return x
-
     frames_gd = common_video.swap_time_and_batch_axes(real_frames)
     frames_pd = common_video.swap_time_and_batch_axes(gen_frames)
+    if actions is not None:
+      actions = common_video.swap_time_and_batch_axes(actions)
 
     if self.is_per_pixel_softmax:
       frames_pd_shape = common_layers.shape_list(frames_pd)
@@ -525,7 +528,13 @@ class NextFrameSv2pLegacy(NextFrameSv2p):
 
     frames_gd = concat_on_y_axis(frames_gd)
     frames_pd = concat_on_y_axis(frames_pd)
-    side_by_side_video = tf.concat([frames_gd, frames_pd], axis=2)
+    if actions is not None:
+      actions = tf.clip_by_value(actions, 0, 1)
+      summary("action_vid", tf.cast(actions * 255, tf.uint8))
+      actions = concat_on_y_axis(actions)
+      side_by_side_video = tf.concat([frames_gd, frames_pd, actions], axis=2)
+    else:
+      side_by_side_video = tf.concat([frames_gd, frames_pd], axis=2)
     tf.summary.image("full_video", side_by_side_video)
 
   def get_input_if_exists(self, features, key, batch_size, num_frames):
